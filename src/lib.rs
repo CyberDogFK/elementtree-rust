@@ -1255,6 +1255,24 @@ impl Element {
 
         Some(node)
     }
+
+    pub fn iter_tag<'a>(&'a self, tag_name: &'a QName) -> Vec<&'a Element> {
+        let mut tag_vec: Vec<&Element> = vec![self];
+        let mut result_tag_vec: Vec<&Element> = vec![];
+
+
+        let mut root_vec: Vec<&Element> = self
+            .find_all(tag_name)
+            .collect();
+        tag_vec.append(&mut root_vec);
+        while !tag_vec.is_empty() {
+            let element = tag_vec.pop().unwrap(); // actually - tag_vec must never be empty at this point
+            result_tag_vec.append(&mut element.find_all(tag_name).collect::<Vec<&Element>>());
+            tag_vec.append(&mut element.children().collect());
+        }
+
+        result_tag_vec
+    }
 }
 
 /// Xml Prolog version handle by elementtree
