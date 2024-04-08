@@ -89,6 +89,7 @@
 #![allow(clippy::wrong_self_convention)]
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp::Ord;
 use std::cmp::Ordering;
 use std::collections::btree_map::Iter as BTreeMapIter;
@@ -98,7 +99,7 @@ use std::hash::{Hash, Hasher};
 use std::io;
 use std::io::{Read, Write};
 use std::mem;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::str::Utf8Error;
 
@@ -743,10 +744,10 @@ impl Element {
         loop {
             match reader.next_event() {
                 Ok(XmlEvent::StartElement {
-                    name,
-                    attributes,
-                    namespace,
-                }) => {
+                       name,
+                       attributes,
+                       namespace,
+                   }) => {
                     return Element::from_start_element(
                         name,
                         attributes,
@@ -762,7 +763,7 @@ impl Element {
                     return Err(Error::UnexpectedEvent {
                         msg: Cow::Borrowed("xml construct"),
                         pos: Position::from_xml_position(&reader),
-                    })
+                    });
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -927,10 +928,10 @@ impl Element {
                     }
                 }
                 Ok(XmlEvent::StartElement {
-                    name,
-                    attributes,
-                    namespace,
-                }) => {
+                       name,
+                       attributes,
+                       namespace,
+                   }) => {
                     self.children.push(Element::from_start_element(
                         name,
                         attributes,
@@ -954,7 +955,7 @@ impl Element {
                     return Err(Error::UnexpectedEvent {
                         msg: Cow::Borrowed("unknown element"),
                         pos: Position::from_xml_position(reader),
-                    })
+                    });
                 }
                 Err(e) => {
                     return Err(e.into());
@@ -1033,16 +1034,16 @@ impl Element {
 
     /// Removes all children that don't match a predicate.
     pub fn retain_children<F>(&mut self, f: F)
-    where
-        F: FnMut(&Element) -> bool,
+        where
+            F: FnMut(&Element) -> bool,
     {
         self.children.retain(f);
     }
 
     /// Removes all children that don't match a predicate. The predicate is passed a mutable reference to each element.
     pub fn retain_children_mut<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&mut Element) -> bool,
+        where
+            F: FnMut(&mut Element) -> bool,
     {
         // TODO: change to retain_mut once MSRV moves up to 1.61
         let old_children = std::mem::take(&mut self.children);
@@ -1260,19 +1261,139 @@ impl Element {
         let mut tag_vec: Vec<&Element> = vec![self];
         let mut result_tag_vec: Vec<&Element> = vec![];
 
-
-        let mut root_vec: Vec<&Element> = self
-            .find_all(tag_name)
-            .collect();
-        tag_vec.append(&mut root_vec);
         while !tag_vec.is_empty() {
             let element = tag_vec.pop().unwrap(); // actually - tag_vec must never be empty at this point
-            result_tag_vec.append(&mut element.find_all(tag_name).collect::<Vec<&Element>>());
+            result_tag_vec.append(&mut element.find_all(tag_name).collect());
             tag_vec.append(&mut element.children().collect());
         }
 
         result_tag_vec
     }
+
+    pub fn iter_tag_mut_rec(&mut self, tag_name: &QName) -> Vec<&mut Element> {
+        // let tag_vec: Vec<&Element> = vec![self];
+        use std::cell::RefCell;
+        
+        let mut result_tag_mut: Vec<&mut Element> = vec![];
+    
+        for e in self.children_mut() {
+            let mut res = e.iter_tag_mut_rec(tag_name);
+            result_tag_mut.append(&mut res);
+        };
+        
+        result_tag_mut.push(self);
+    
+        result_tag_mut
+    }
+
+    // pub fn rec(&mut: Vec<&mut Element>, tag_name: &QName) -> Vec<&mut Element> {
+    // 
+    // }
+
+    // pub fn iter_tag_mut<'a>(mut self, tag_name: &QName) -> (Self, Vec<Element>) {
+    //     struct TempIter {
+    //         iter: Vec<Rc<RefCell<Element>>>,
+    //     }
+    // 
+    //     use std::cell::Cell;
+    // 
+    //     // let mut tag_vec: Vec<Rc<RefCell<Element>>> = vec![Rc::new(RefCell::new(self))];
+    //     // let mut result_tag_vec: Vec<Rc<RefCell<Element>>> = vec![];
+    //     let mut tag_vec: Vec<&mut Element> = vec![&mut self];
+    //     let mut result_tag_vec: Vec<Element> = vec![];
+    // 
+    //     while !tag_vec.is_empty() {
+    //         let mut element = tag_vec.pop().unwrap(); // actually - tag_vec must never be empty at this point
+    //         let mut childrens = element.children_mut()
+    //             .collect();
+    // 
+    //         tag_vec.append(&mut childrens);
+    // 
+    //         result_tag_vec.push(*element)
+    //     }
+    // 
+    //     // result_tag_vec
+    //     (self, vec![])
+    // }
+
+
+    // pub fn iter_tag_mut<'a>(&'a mut self, tag_name: &'a QName)
+    //     ->
+    //     // Vec<&'a mut Element>
+    //     Vec<Rc<RefCell<&mut Element>>>
+    // {
+    //     use std::cell::RefCell;
+    //
+    //     let mut tag_vec: Vec<&&mut Element> = vec![&self];
+    //     let mut tag_vec_ref: Vec<&&mut Element> = vec![];
+    //
+    //     // for e in tag_vec {
+    //     //     tag_vec.append(&mut e.children_mut().collect());
+    //     // }
+    //
+    //     while let Some(e) = tag_vec.pop() {
+    //         let mut childrens: Vec<&&mut Element> = e.children_mut()
+    //             .map(|e| &e)
+    //             .collect();
+    //         {
+    //             let mut childrens = childrens;
+    //             let mut some = childrens.iter()
+    //                 .map(|e| {
+    //                     e
+    //                 })
+    //                 .collect();
+    //             tag_vec_ref.append(
+    //                 &mut some
+    //             );
+    //         }
+    //         tag_vec.append(&mut childrens);
+    //     }
+    //
+    //     return tag_vec_ref;
+    //     // let mut s = tag_vec_ref.iter()
+    //     //     .map(|e|
+    //     //         e.as_ref()
+    //     //     ).collect();
+    //     // return s;
+    //     // use std::cell::RefCell;
+    //     //
+    //     // let mut tag_vec: Vec<Rc<RefCell<&mut Element>>> = vec![Rc::new(RefCell::from(self))];
+    //     // let mut result_tag_vec: Vec<Rc<RefCell<&mut Element>>> = vec![];
+    //     //
+    //     // while let Some(e) = tag_vec.pop().unwrap() {
+    //     //
+    //     // }
+    //
+    //     // while !tag_vec.is_empty() {
+    //     //     let element = tag_vec.pop().unwrap(); // actually - tag_vec must never be empty at this point
+    //     //     {
+    //     //         let mut next_childrens: Vec<Rc<RefCell<&mut Element>>> = {
+    //     //             let mut refer = element
+    //     //                 .clone();
+    //     //             let mut x = refer
+    //     //                 .borrow_mut();
+    //     //             let r = x.children_mut()
+    //     //                 .map(|e| Rc::new(RefCell::from(e)))
+    //     //                 .collect();
+    //     //             r
+    //     //         };
+    //     //         tag_vec.append(&mut next_childrens);
+    //     //     }
+    //     //     {
+    //     //         let mut refer = element.borrow_mut();
+    //     //         let mut find_all = refer
+    //     //             .find_all_mut(tag_name)
+    //     //             .map(|e| Rc::new(RefCell::from(e)))
+    //     //             .collect();
+    //     //         result_tag_vec.append(&mut find_all);
+    //     //     }
+    //     // }
+    //     //
+    //     // result_tag_vec.iter()
+    //     //     .map(|mut e| &mut **e.borrow_mut())
+    //     //     .collect()
+    //     vec![]
+    // }
 }
 
 /// Xml Prolog version handle by elementtree
