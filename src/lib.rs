@@ -492,9 +492,29 @@ pub struct ChildrenMut<'a> {
     iter: ::std::slice::IterMut<'a, Element>,
 }
 
+
 /// An iterator over attributes of an element.
 pub struct Attrs<'a> {
     iter: BTreeMapIter<'a, QName<'a>, String>,
+}
+
+/// An iterator over all elements in tree with the same tag
+/// TODO: DOING THIS
+pub struct FindTag<'a> {
+    tag: Cow<'a, QName<'a>>,
+    tag_iter: Tag<'a>
+}
+
+pub struct Tag<'a> {
+    idx: usize,
+    element: &'a Element,
+}
+
+
+/// A mutable iterator over tag of an tree
+/// TODO: DO THIS
+pub struct TagMut<'a> {
+    iter: ::std::slice::IterMut<'a, Element>,
 }
 
 /// An iterator over matching children.
@@ -638,6 +658,14 @@ impl From<XmlWriteError> for Error {
     }
 }
 
+impl<'a> Iterator for Tag<'a> {
+    type Item = &'a Element;
+    
+    fn next(&mut self) -> Option<&'a Element> {
+        // TODO: think about how to iterate over all childrens in root
+    }
+}
+
 impl<'a> Iterator for Children<'a> {
     type Item = &'a Element;
 
@@ -649,6 +677,14 @@ impl<'a> Iterator for Children<'a> {
         } else {
             None
         }
+    }
+}
+
+impl<'a> Iterator for TagMut<'a> {
+    type Item = &'a mut Element;
+    
+    fn next(&mut self) -> Option<&'a mut Element> {
+        self.iter.next()
     }
 }
 
@@ -1269,131 +1305,6 @@ impl Element {
 
         result_tag_vec
     }
-
-    pub fn iter_tag_mut_rec(&mut self, tag_name: &QName) -> Vec<&mut Element> {
-        // let tag_vec: Vec<&Element> = vec![self];
-        use std::cell::RefCell;
-        
-        let mut result_tag_mut: Vec<&mut Element> = vec![];
-    
-        for e in self.children_mut() {
-            let mut res = e.iter_tag_mut_rec(tag_name);
-            result_tag_mut.append(&mut res);
-        };
-        
-        result_tag_mut.push(self);
-    
-        result_tag_mut
-    }
-
-    // pub fn rec(&mut: Vec<&mut Element>, tag_name: &QName) -> Vec<&mut Element> {
-    // 
-    // }
-
-    // pub fn iter_tag_mut<'a>(mut self, tag_name: &QName) -> (Self, Vec<Element>) {
-    //     struct TempIter {
-    //         iter: Vec<Rc<RefCell<Element>>>,
-    //     }
-    // 
-    //     use std::cell::Cell;
-    // 
-    //     // let mut tag_vec: Vec<Rc<RefCell<Element>>> = vec![Rc::new(RefCell::new(self))];
-    //     // let mut result_tag_vec: Vec<Rc<RefCell<Element>>> = vec![];
-    //     let mut tag_vec: Vec<&mut Element> = vec![&mut self];
-    //     let mut result_tag_vec: Vec<Element> = vec![];
-    // 
-    //     while !tag_vec.is_empty() {
-    //         let mut element = tag_vec.pop().unwrap(); // actually - tag_vec must never be empty at this point
-    //         let mut childrens = element.children_mut()
-    //             .collect();
-    // 
-    //         tag_vec.append(&mut childrens);
-    // 
-    //         result_tag_vec.push(*element)
-    //     }
-    // 
-    //     // result_tag_vec
-    //     (self, vec![])
-    // }
-
-
-    // pub fn iter_tag_mut<'a>(&'a mut self, tag_name: &'a QName)
-    //     ->
-    //     // Vec<&'a mut Element>
-    //     Vec<Rc<RefCell<&mut Element>>>
-    // {
-    //     use std::cell::RefCell;
-    //
-    //     let mut tag_vec: Vec<&&mut Element> = vec![&self];
-    //     let mut tag_vec_ref: Vec<&&mut Element> = vec![];
-    //
-    //     // for e in tag_vec {
-    //     //     tag_vec.append(&mut e.children_mut().collect());
-    //     // }
-    //
-    //     while let Some(e) = tag_vec.pop() {
-    //         let mut childrens: Vec<&&mut Element> = e.children_mut()
-    //             .map(|e| &e)
-    //             .collect();
-    //         {
-    //             let mut childrens = childrens;
-    //             let mut some = childrens.iter()
-    //                 .map(|e| {
-    //                     e
-    //                 })
-    //                 .collect();
-    //             tag_vec_ref.append(
-    //                 &mut some
-    //             );
-    //         }
-    //         tag_vec.append(&mut childrens);
-    //     }
-    //
-    //     return tag_vec_ref;
-    //     // let mut s = tag_vec_ref.iter()
-    //     //     .map(|e|
-    //     //         e.as_ref()
-    //     //     ).collect();
-    //     // return s;
-    //     // use std::cell::RefCell;
-    //     //
-    //     // let mut tag_vec: Vec<Rc<RefCell<&mut Element>>> = vec![Rc::new(RefCell::from(self))];
-    //     // let mut result_tag_vec: Vec<Rc<RefCell<&mut Element>>> = vec![];
-    //     //
-    //     // while let Some(e) = tag_vec.pop().unwrap() {
-    //     //
-    //     // }
-    //
-    //     // while !tag_vec.is_empty() {
-    //     //     let element = tag_vec.pop().unwrap(); // actually - tag_vec must never be empty at this point
-    //     //     {
-    //     //         let mut next_childrens: Vec<Rc<RefCell<&mut Element>>> = {
-    //     //             let mut refer = element
-    //     //                 .clone();
-    //     //             let mut x = refer
-    //     //                 .borrow_mut();
-    //     //             let r = x.children_mut()
-    //     //                 .map(|e| Rc::new(RefCell::from(e)))
-    //     //                 .collect();
-    //     //             r
-    //     //         };
-    //     //         tag_vec.append(&mut next_childrens);
-    //     //     }
-    //     //     {
-    //     //         let mut refer = element.borrow_mut();
-    //     //         let mut find_all = refer
-    //     //             .find_all_mut(tag_name)
-    //     //             .map(|e| Rc::new(RefCell::from(e)))
-    //     //             .collect();
-    //     //         result_tag_vec.append(&mut find_all);
-    //     //     }
-    //     // }
-    //     //
-    //     // result_tag_vec.iter()
-    //     //     .map(|mut e| &mut **e.borrow_mut())
-    //     //     .collect()
-    //     vec![]
-    // }
 }
 
 /// Xml Prolog version handle by elementtree
