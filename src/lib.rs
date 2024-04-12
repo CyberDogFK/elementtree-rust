@@ -485,6 +485,7 @@ pub struct Element {
 pub struct Children<'a> {
     idx: usize,
     element: &'a Element,
+    current_elem: &'a Element,
 }
 
 /// A mutable iterator over children of an element.
@@ -505,11 +506,7 @@ pub struct FindTag<'a> {
     tag_iter: Tag<'a>
 }
 
-pub struct Tag<'a> {
-    idx: usize,
-    element: &'a Element,
-}
-
+/// TODO: There was Tag
 
 /// A mutable iterator over tag of an tree
 /// TODO: DO THIS
@@ -658,12 +655,82 @@ impl From<XmlWriteError> for Error {
     }
 }
 
+pub struct Tag<'a> {
+    idx: usize,
+    element: &'a Element,
+    nested_element: Option<NestedTag<'a>>
+}
+
+pub struct NestedTag<'a> {
+    idx: usize,
+    element: &'a Element,
+    nested_tag: Option<&'a NestedTag<'a>>
+}
+
 impl<'a> Iterator for Tag<'a> {
     type Item = &'a Element;
     
     fn next(&mut self) -> Option<&'a Element> {
         // TODO: think about how to iterate over all childrens in root
+        if self.idx < self.element.children.len() {
+            let rv = &self.element.children[self.idx];
+            
+            
+            if let Some(ref mut elem) = self.nested_element {
+                let mut ee = None;
+                while let Some(mut e) = elem.nested_tag {
+                    ee = Some(e)
+                };
+            }
+            
+            // If no childrens 
+            if self.nested_element.is_none() && !rv.children.is_empty() {
+                self.nested_element = Some(NestedTag {
+                    idx: 0,
+                    element: rv,
+                    nested_tag: None,
+                });
+            }
+            // if true this function will iterate over childrens until none left.
+            if let Some(ref mut nested_element) = &mut self.nested_element {
+                
+                
+                if nested_element.idx < nested_element.element.child_count() {
+                    dbg!("There is still some child elements");
+                    let rv = &nested_element.element.children[nested_element.idx];
+                    nested_element.idx += 1;
+                    return Some(rv);
+                } else {
+                    dbg!("Child elements is ended");
+                    self.nested_element = None; 
+                }
+            }
+            // There is no any childrens on childrens - continue iterate over root element childrens
+            self.idx += 1;
+            Some(rv)
+        } else {
+            None
+        }
     }
+}
+
+#[test]
+fn iterate_over_elements_with_one_nested() {
+    let element = Element::from_reader(r#"
+    <root>
+        <element>E</element>
+        <elementWithNested>
+            <nestedElement>Nested value</nestedElement>
+        </elementWithNested>
+    </root>
+    "#.as_bytes()
+    ).unwrap();
+    let vec: Vec<&Element> = element.iter_tag()
+        .collect();
+    assert_eq!(vec.len(), 3);
+    assert_eq!(vec[0].tag, QName::from("element"));
+    assert_eq!(vec[1].tag, QName::from("nestedElement"));
+    assert_eq!(vec[2].tag, QName::from("elementWithNested"));
 }
 
 impl<'a> Iterator for Children<'a> {
@@ -1129,6 +1196,7 @@ impl Element {
         Children {
             idx: 0,
             element: self,
+            current_elem: self,
         }
     }
 
@@ -1293,7 +1361,7 @@ impl Element {
         Some(node)
     }
 
-    pub fn iter_tag<'a>(&'a self, tag_name: &'a QName) -> Vec<&'a Element> {
+    pub fn tag_vec<'a>(&'a self, tag_name: &'a QName) -> Vec<&'a Element> {
         let mut tag_vec: Vec<&Element> = vec![self];
         let mut result_tag_vec: Vec<&Element> = vec![];
 
@@ -1304,6 +1372,14 @@ impl Element {
         }
 
         result_tag_vec
+    }
+
+    pub fn iter_tag(&self) -> Tag {
+        Tag {
+            idx: 0,
+            element: self,
+            nested_element: None,
+        }
     }
 }
 
