@@ -763,7 +763,10 @@ fn iterate_over_elements_nested_array() {
     assert_eq!(vec.len(), 6);
     assert_eq!(vec[0].tag, QName::from("element"));
     assert_eq!(vec[1].tag, QName::from("nestedElement"));
-    assert_eq!(vec[2].tag, QName::from("elementWithNested"));
+    assert_eq!(vec[2].tag, QName::from("nestedElement"));
+    assert_eq!(vec[3].tag, QName::from("nestedElement"));
+    assert_eq!(vec[4].tag, QName::from("nestedElement"));
+    assert_eq!(vec[5].tag, QName::from("elementWithNested"));
 }
 
 #[test]
@@ -788,7 +791,11 @@ fn iterate_over_elements_with_multiple_nested() {
     assert_eq!(vec.len(), 7);
     assert_eq!(vec[0].tag, QName::from("element"));
     assert_eq!(vec[1].tag, QName::from("nestedElement"));
-    assert_eq!(vec[2].tag, QName::from("elementWithNested"));
+    assert_eq!(vec[2].tag, QName::from("nestedElement"));
+    assert_eq!(vec[3].tag, QName::from("nestedElement"));
+    assert_eq!(vec[4].tag, QName::from("thriceNestedElement"));
+    assert_eq!(vec[5].tag, QName::from("twiceNestedElement"));
+    assert_eq!(vec[6].tag, QName::from("elementWithNested"));
 }
 
 impl<'a> Iterator for Children<'a> {
