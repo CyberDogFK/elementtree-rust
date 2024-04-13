@@ -1,5 +1,7 @@
-use std::io::stdout;
+use std::cell::RefCell;
 use elementtree::{Element, QName};
+use std::io::stdout;
+use std::rc::Rc;
 
 #[test]
 fn test_iter() {
@@ -17,14 +19,14 @@ fn test_iter() {
     )
     .unwrap();
     let tag_name = QName::from("item");
-    let elements: Vec<&Element> = root.iter_tag(&tag_name);
+    let elements: Vec<&Element> = root.iter_elements().collect();
 
     assert!(!elements.is_empty(), "Elements must not be empty");
     let mut counter = 0;
     elements.into_iter().for_each(|e| {
         assert_eq!(
             e.tag(),
-            &QName::from("item"),
+            &tag_name,
             "It  must find elements only with name item"
         );
         counter += 1;
@@ -59,7 +61,7 @@ fn more_harder_test() {
     .unwrap();
 
     let tag_name = QName::from("FindingTag");
-    let founded_elements = root.iter_tag(&tag_name);
+    let founded_elements: Vec<&Element> = root.iter_elements().collect();
 
     assert!(!founded_elements.is_empty(), "Elements must not be empty");
     let mut counter = 0;
@@ -90,18 +92,21 @@ fn on_no_found_tags_return_empty_list() {
         </Header>
     </Order>
     "
-            .as_bytes(),
+        .as_bytes(),
     )
-        .unwrap();
-    
+    .unwrap();
+
     let tag_name = QName::from("NotExistingTag");
-    let elements = root.iter_tag(&tag_name);
-    
-    assert!(elements.is_empty(), "If no elements found must return empty vector")
+    let elements: Vec<&Element> = root.iter_elements().collect();
+
+    assert!(
+        elements.is_empty(),
+        "If no elements found must return empty vector"
+    )
 }
 
 #[test]
-fn test_on_stupidity() {
+fn test_on_names() {
     let mut root = Element::from_reader(
         r#"
         <root>
@@ -110,14 +115,15 @@ fn test_on_stupidity() {
                 </item>
             </item>
         </root>
-        "#.as_bytes()
-    ).unwrap();
+        "#
+        .as_bytes(),
+    )
+    .unwrap();
     root.children().for_each(|e| {
         let name = e.tag().name();
         let name2 = e.children().next().unwrap().tag().name();
         println!("{}", name);
-    }
-    )
+    })
 }
 
 #[test]
@@ -132,19 +138,23 @@ fn editing_tag_value() {
         </list>
     </root>
     "#
-            .as_bytes(),
+        .as_bytes(),
     )
-        .unwrap();
-    
+    .unwrap();
+
     let tag_name = QName::from("item");
     // root.iter_tag(&tag_name).iter_mut()
     //     .map(|e| )
     // ;
-    let mut elements = root.iter_tag_mut_rec(&tag_name);
+    let mut elements: Vec<Rc<RefCell<Element>>> = root.into_iter_elements_mut().collect();
     assert!(!elements.is_empty(), "Elements must not be empty");
-    assert_eq!(elements[0].text(), "Item 1");
-    assert_eq!(elements[1].text(), "Item 2");
-    assert_eq!(elements[2].text(), "Item 3");
-    
-    root.to_writer(stdout()).unwrap()
+    assert_eq!(elements[0].borrow().text(), "Item 1");
+    assert_eq!(elements[1].borrow().text(), "Item 2");
+    assert_eq!(elements[2].borrow().text(), "Item 3");
+    // let l: Vec<&Element> = elements[0].borrow().children()
+    //     .collect();
+    // 
+    // dbg!(l);
+    // assert!(false);
+    // root.to_writer(stdout()).unwrap()
 }

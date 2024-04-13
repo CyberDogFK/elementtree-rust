@@ -89,7 +89,7 @@
 #![allow(clippy::wrong_self_convention)]
 
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::cmp::Ord;
 use std::cmp::Ordering;
 use std::collections::btree_map::Iter as BTreeMapIter;
@@ -503,7 +503,7 @@ pub struct Attrs<'a> {
 /// TODO: DOING THIS
 pub struct FindTag<'a> {
     tag: Cow<'a, QName<'a>>,
-    tag_iter: Tag<'a>,
+    tag_iter: ElementsIter<'a>,
 }
 
 /// TODO: There was Tag
@@ -652,14 +652,14 @@ impl From<XmlWriteError> for Error {
     }
 }
 
-pub struct Tag<'a> {
+pub struct ElementsIter<'a> {
     idx: usize,
     element: &'a Element,
-    nested_element: Option<Box<Tag<'a>>>,
+    nested_element: Option<Box<ElementsIter<'a>>>,
 }
 
 // Only one problem, it returns parent tags after all childrens tags
-impl<'a> Iterator for Tag<'a> {
+impl<'a> Iterator for ElementsIter<'a> {
     type Item = &'a Element;
 
     fn next(&mut self) -> Option<&'a Element> {
@@ -668,7 +668,7 @@ impl<'a> Iterator for Tag<'a> {
 
             // If no childrens
             if self.nested_element.is_none() && !rv.children.is_empty() {
-                self.nested_element = Some(Box::new(Tag {
+                self.nested_element = Some(Box::new(ElementsIter {
                     idx: 0,
                     element: rv,
                     nested_element: None,
@@ -690,72 +690,26 @@ impl<'a> Iterator for Tag<'a> {
     }
 }
 
-// pub struct TagMut<'a> {
-//     idx: usize,
-//     element: Rc<std::cell::RefCell<&'a mut Element>>,
-//     nested_element: Option<Rc<RefCell<TagMut<'a>>>>,
-// }
-// 
-// impl<'a> Iterator for TagMut<'a> {
-//     type Item = Rc<RefCell<&'a mut Element>>;
-// 
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.idx < self.element.borrow().children.len() {
-//             {
-//                 let rv = &self.element.borrow().children[self.idx];
-// 
-//                 // If no childrens
-//                 if self.nested_element.is_none() && !rv.children.is_empty() {
-//                     self.nested_element = Some(Rc::new(RefCell::new(TagMut {
-//                         idx: 0,
-//                         element: self.element.clone(),
-//                         nested_element: None,
-//                     })));
-//                 }
-//             }
-// 
-//             if let Some(ref mut e) = self.nested_element {
-//                 if let Some(e) = e.borrow_mut().next() {
-//                     return Some(e)
-//                 }
-//             }
-// 
-//             // let s = self.nested_element.as_mut()
-//             //     // if here some childrens it call iterator on them
-//             //     .and_then(|e| e.next());
-//             // if s.is_some() {
-//             //     return s
-//             // }
-// 
-//             // There is no any childrens on childrens -
-//             // continue iterating over root element childrens
-//             self.idx += 1;
-//             let rv = &mut self.element.borrow_mut().children[self.idx];
-//             Some(Rc::new(RefCell::new(self.element.borrow_mut().children[self.idx])))
-//         } else {
-//             None
-//         }
-//     }
-// }
-
-pub struct TagMut {
+pub struct ElementsIterMut {
     idx: usize,
-    element: Element,
-    nested_element: Option<Box<TagMut>>,
+    elements: Vec<Rc<RefCell<Element>>>,
+    nested_element: Option<Box<ElementsIterMut>>,
 }
 
-impl<'a> Iterator for TagMut {
-    type Item = Element;
+impl Iterator for ElementsIterMut {
+    type Item = Rc<RefCell<Element>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx < self.element.children.len() {
-            let rv = &self.element.children[self.idx];
+        if self.idx < self.elements.len() {
+            let rv = self.elements[self.idx].borrow();
 
             // If some childrens
             if self.nested_element.is_none() && !rv.children.is_empty() {
-                self.nested_element = Some(Box::new(TagMut {
+                self.nested_element = Some(Box::new(ElementsIterMut {
                     idx: 0,
-                    element: rv.clone(),
+                    elements: rv.clone().children.into_iter()
+                        .map(|e| Rc::new(RefCell::new(e)))
+                        .collect(),
                     nested_element: None,
                 }));
             }
@@ -775,8 +729,11 @@ impl<'a> Iterator for TagMut {
 
             // There is no any childrens on childrens -
             // continue iterating over root element childrens
+            // let rv = self.elements[self.idx];
+            // let rv = self.elements.remove(self.idx);
+            let rv = self.elements[self.idx].clone();
             self.idx += 1;
-            Some(rv.clone())
+            Some(rv)
         } else {
             None
         }
@@ -797,11 +754,11 @@ fn iterate_mut_over_elements_with_one_nested() {
             .as_bytes(),
     )
         .unwrap();
-    let vec: Vec<Element> = element.iter_tag_mut().collect();
+    let vec: Vec<Rc<RefCell<Element>>> = element.into_iter_elements_mut().collect();
     assert_eq!(vec.len(), 3);
-    assert_eq!(vec[0].tag, QName::from("element"));
-    assert_eq!(vec[1].tag, QName::from("nestedElement"));
-    assert_eq!(vec[2].tag, QName::from("elementWithNested"));
+    assert_eq!(vec[0].borrow().tag, QName::from("element"));
+    assert_eq!(vec[1].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[2].borrow().tag, QName::from("elementWithNested"));
 }
 
 #[test]
@@ -821,14 +778,15 @@ fn iterate_mut_over_elements_nested_array() {
             .as_bytes(),
     )
         .unwrap();
-    let vec: Vec<Element> = element.iter_tag_mut().collect();
+    let vec: Vec<Rc<RefCell<Element>>> = element.into_iter_elements_mut().collect();
     assert_eq!(vec.len(), 6);
-    assert_eq!(vec[0].tag, QName::from("element"));
-    assert_eq!(vec[1].tag, QName::from("nestedElement"));
-    assert_eq!(vec[2].tag, QName::from("nestedElement"));
-    assert_eq!(vec[3].tag, QName::from("nestedElement"));
-    assert_eq!(vec[4].tag, QName::from("nestedElement"));
-    assert_eq!(vec[5].tag, QName::from("elementWithNested"));
+    assert_eq!(vec[0].borrow().tag, QName::from("element"));
+    assert_eq!(vec[1].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[2].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[3].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[4].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[5].borrow().tag, QName::from("elementWithNested"));
+    assert_eq!(vec[5].borrow().children.len(), 4);
 }
 
 #[test]
@@ -851,15 +809,15 @@ fn iterate_mut_over_elements_with_multiple_nested() {
             .as_bytes(),
     )
         .unwrap();
-    let vec: Vec<Element> = element.iter_tag_mut().collect();
+    let vec: Vec<Rc<RefCell<Element>>> = element.into_iter_elements_mut().collect();
     assert_eq!(vec.len(), 7);
-    assert_eq!(vec[0].tag, QName::from("element"));
-    assert_eq!(vec[1].tag, QName::from("nestedElement"));
-    assert_eq!(vec[2].tag, QName::from("nestedElement"));
-    assert_eq!(vec[3].tag, QName::from("nestedElement"));
-    assert_eq!(vec[4].tag, QName::from("thriceNestedElement"));
-    assert_eq!(vec[5].tag, QName::from("twiceNestedElement"));
-    assert_eq!(vec[6].tag, QName::from("elementWithNested"));
+    assert_eq!(vec[0].borrow().tag, QName::from("element"));
+    assert_eq!(vec[1].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[2].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[3].borrow().tag, QName::from("nestedElement"));
+    assert_eq!(vec[4].borrow().tag, QName::from("thriceNestedElement"));
+    assert_eq!(vec[5].borrow().tag, QName::from("twiceNestedElement"));
+    assert_eq!(vec[6].borrow().tag, QName::from("elementWithNested"));
 }
 
 
@@ -877,7 +835,7 @@ fn iterate_over_elements_with_one_nested() {
             .as_bytes(),
     )
         .unwrap();
-    let vec: Vec<&Element> = element.iter_tag().collect();
+    let vec: Vec<&Element> = element.iter_elements().collect();
     assert_eq!(vec.len(), 3);
     assert_eq!(vec[0].tag, QName::from("element"));
     assert_eq!(vec[1].tag, QName::from("nestedElement"));
@@ -901,7 +859,7 @@ fn iterate_over_elements_nested_array() {
             .as_bytes(),
     )
         .unwrap();
-    let vec: Vec<&Element> = element.iter_tag().collect();
+    let vec: Vec<&Element> = element.iter_elements().collect();
     assert_eq!(vec.len(), 6);
     assert_eq!(vec[0].tag, QName::from("element"));
     assert_eq!(vec[1].tag, QName::from("nestedElement"));
@@ -931,7 +889,7 @@ fn iterate_over_elements_with_multiple_nested() {
             .as_bytes(),
     )
         .unwrap();
-    let vec: Vec<&Element> = element.iter_tag().collect();
+    let vec: Vec<&Element> = element.iter_elements().collect();
     assert_eq!(vec.len(), 7);
     assert_eq!(vec[0].tag, QName::from("element"));
     assert_eq!(vec[1].tag, QName::from("nestedElement"));
@@ -1575,18 +1533,21 @@ impl Element {
         result_tag_vec
     }
 
-    pub fn iter_tag(&self) -> Tag {
-        Tag {
+    pub fn iter_elements(&self) -> ElementsIter {
+        ElementsIter {
             idx: 0,
             element: self,
             nested_element: None,
         }
     }
 
-    pub fn iter_tag_mut(self) -> TagMut {
-        TagMut {
+    pub fn into_iter_elements_mut(self) -> ElementsIterMut {
+        ElementsIterMut {
             idx: 0,
-            element: self,
+            elements: self.children
+                .into_iter()
+                .map(|e| Rc::new(RefCell::new(e)))
+                .collect(),
             nested_element: None,
         }
     }
