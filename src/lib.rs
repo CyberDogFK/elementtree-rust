@@ -503,7 +503,7 @@ pub struct Attrs<'a> {
 /// TODO: DOING THIS
 pub struct FindTag<'a> {
     tag: Cow<'a, QName<'a>>,
-    tag_iter: Tag<'a>
+    tag_iter: Tag<'a>,
 }
 
 /// TODO: There was Tag
@@ -658,52 +658,62 @@ impl From<XmlWriteError> for Error {
 pub struct Tag<'a> {
     idx: usize,
     element: &'a Element,
-    nested_element: Option<NestedTag<'a>>
-}
-
-pub struct NestedTag<'a> {
-    idx: usize,
-    element: &'a Element,
-    nested_tag: Option<&'a NestedTag<'a>>
+    nested_element: Option<Box<Tag<'a>>>,
 }
 
 impl<'a> Iterator for Tag<'a> {
     type Item = &'a Element;
-    
+
     fn next(&mut self) -> Option<&'a Element> {
         // TODO: think about how to iterate over all childrens in root
         if self.idx < self.element.children.len() {
             let rv = &self.element.children[self.idx];
-            
-            
-            if let Some(ref mut elem) = self.nested_element {
-                let mut ee = None;
-                while let Some(mut e) = elem.nested_tag {
-                    ee = Some(e)
-                };
-            }
-            
+
             // If no childrens 
             if self.nested_element.is_none() && !rv.children.is_empty() {
-                self.nested_element = Some(NestedTag {
+                self.nested_element = Some(Box::new(Tag {
                     idx: 0,
                     element: rv,
-                    nested_tag: None,
-                });
+                    nested_element: None,
+                }));
             }
+
+            // while let Some(ref mut e) = self.nested_element {
+            //     some = Some(e)
+            // }
+
+            // let mut current_nested_element = &mut self.nested_element;
+            // while let Some(ref mut nested_element) = current_nested_element {
+            //     // If no childrens 
+            //     if nested_element.nested_element.is_none() && !nested_element.element.children.is_empty() {
+            //         nested_element.nested_element = Some(Box::new(Tag {
+            //             idx: 0,
+            //             element: rv,
+            //             nested_element: None,
+            //         }));
+            //     }
+            //     current_nested_element = &mut nested_element.nested_element;
+            // }
+
             // if true this function will iterate over childrens until none left.
-            if let Some(ref mut nested_element) = &mut self.nested_element {
-                
-                
-                if nested_element.idx < nested_element.element.child_count() {
-                    dbg!("There is still some child elements");
-                    let rv = &nested_element.element.children[nested_element.idx];
-                    nested_element.idx += 1;
-                    return Some(rv);
-                } else {
-                    dbg!("Child elements is ended");
-                    self.nested_element = None; 
+            if let Some(ref mut nested_element) = self.nested_element {
+                let next = nested_element.next();
+                if next.is_some() {
+                    return next;
                 }
+                // if let Some(ref mut nested_nested_element) = nested_element.nested_element {
+                //     return nested_nested_element.next();
+                // }
+                // 
+                // if nested_element.idx < nested_element.element.child_count() {
+                //     dbg!("There is still some child elements");
+                //     let rv = &nested_element.element.children[nested_element.idx];
+                //     nested_element.idx += 1;
+                //     return Some(rv);
+                // } else {
+                //     dbg!("Child elements is ended");
+                //     self.nested_element = None;
+                // }
             }
             // There is no any childrens on childrens - continue iterate over root element childrens
             self.idx += 1;
@@ -733,6 +743,54 @@ fn iterate_over_elements_with_one_nested() {
     assert_eq!(vec[2].tag, QName::from("elementWithNested"));
 }
 
+
+#[test]
+fn iterate_over_elements_nested_array() {
+    let element = Element::from_reader(r#"
+    <root>
+        <element>E</element>
+        <elementWithNested>
+            <nestedElement>Nested value</nestedElement>
+            <nestedElement>Nested value 2</nestedElement>
+            <nestedElement>Nested value 3</nestedElement>
+            <nestedElement>Nested value 4</nestedElement>
+        </elementWithNested>
+    </root>
+    "#.as_bytes()
+    ).unwrap();
+    let vec: Vec<&Element> = element.iter_tag()
+        .collect();
+    assert_eq!(vec.len(), 6);
+    assert_eq!(vec[0].tag, QName::from("element"));
+    assert_eq!(vec[1].tag, QName::from("nestedElement"));
+    assert_eq!(vec[2].tag, QName::from("elementWithNested"));
+}
+
+#[test]
+fn iterate_over_elements_with_multiple_nested() {
+    let element = Element::from_reader(r#"
+    <root>
+        <element>E</element>
+        <elementWithNested>
+            <nestedElement>Nested value</nestedElement>
+            <twiceNestedElement>
+                <nestedElement>Double nested value</nestedElement>
+                <thriceNestedElement>
+                    <nestedElement>Three times nested value</nestedElement>
+                </thriceNestedElement>
+            </twiceNestedElement>
+        </elementWithNested>
+    </root>
+    "#.as_bytes()
+    ).unwrap();
+    let vec: Vec<&Element> = element.iter_tag()
+        .collect();
+    assert_eq!(vec.len(), 7);
+    assert_eq!(vec[0].tag, QName::from("element"));
+    assert_eq!(vec[1].tag, QName::from("nestedElement"));
+    assert_eq!(vec[2].tag, QName::from("elementWithNested"));
+}
+
 impl<'a> Iterator for Children<'a> {
     type Item = &'a Element;
 
@@ -749,7 +807,7 @@ impl<'a> Iterator for Children<'a> {
 
 impl<'a> Iterator for TagMut<'a> {
     type Item = &'a mut Element;
-    
+
     fn next(&mut self) -> Option<&'a mut Element> {
         self.iter.next()
     }
