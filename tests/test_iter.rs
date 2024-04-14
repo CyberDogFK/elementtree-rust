@@ -3,6 +3,36 @@ use elementtree::{Element, QName};
 use std::rc::Rc;
 
 #[test]
+fn iterate_mut_and_edit_elements() {
+    let mut element = Element::from_reader(
+        r#"
+        <root>
+            <editElement>Edit to</editElement>
+            <elementWithNested>
+                <editElement>Edit to</editElement>
+            </elementWithNested>
+        </root>
+        "#.as_bytes()
+    ).unwrap();
+    let tag = QName::from("editElement");
+    let new_text = "Edited";
+    let vec: Vec<Rc<RefCell<Element>>> = element.into_iter_elements_mut()
+        .map(|e| {
+            {
+                let mut element = e.borrow_mut();
+                if element.tag() == &tag {
+                    element.set_text(new_text);
+                };
+            }
+            e
+        })
+        .collect();
+    dbg!(&vec[0]);
+    assert!(false);
+    
+}
+
+#[test]
 fn iterate_mut_over_elements_with_one_nested() {
     let mut element = Element::from_reader(
         r#"
@@ -227,10 +257,10 @@ fn test_iter() {
 //         .as_bytes(),
 //     )
 //     .unwrap();
-// 
+//
 //     let tag_name = QName::from("FindingTag");
 //     let founded_elements: Vec<&Element> = root.iter_elements().collect();
-// 
+//
 //     assert!(!founded_elements.is_empty(), "Elements must not be empty");
 //     let mut counter = 0;
 //     founded_elements.into_iter().for_each(|e| {
@@ -263,10 +293,10 @@ fn test_iter() {
 //         .as_bytes(),
 //     )
 //     .unwrap();
-// 
+//
 //     let tag_name = QName::from("NotExistingTag");
 //     let elements: Vec<&Element> = root.iter_elements().collect();
-// 
+//
 //     assert!(
 //         elements.is_empty(),
 //         "If no elements found must return empty vector"
@@ -322,7 +352,7 @@ fn editing_tag_value() {
     assert_eq!(elements[4].borrow().text(), "Item 3");
     // let l: Vec<&Element> = elements[0].borrow().children()
     //     .collect();
-    // 
+    //
     // dbg!(l);
     // assert!(false);
     // root.to_writer(stdout()).unwrap()

@@ -718,7 +718,7 @@ impl Iterator for ElementsIterMut {
             if self.nested_element.is_none() && !rv.children.is_empty() {
                 self.nested_element = Some(Box::new(ElementsIterMut {
                     idx: 0,
-                    elements: rv.clone().children.into_iter()
+                    elements: rv.children.into_iter()
                         .map(|e| Rc::new(RefCell::new(e)))
                         .collect(),
                     nested_element: None,
