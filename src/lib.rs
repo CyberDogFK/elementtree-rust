@@ -654,7 +654,7 @@ impl From<XmlWriteError> for Error {
 
 pub struct ElementsIter<'a> {
     idx: usize,
-    element: &'a Element,
+    elements: Vec<&'a Element>,
     nested_element: Option<Box<ElementsIter<'a>>>,
 }
 
@@ -663,27 +663,38 @@ impl<'a> Iterator for ElementsIter<'a> {
     type Item = &'a Element;
 
     fn next(&mut self) -> Option<&'a Element> {
-        if self.idx < self.element.children.len() {
-            let rv = &self.element.children[self.idx];
+        if self.idx < self.elements.len() {
+            let rv = &self.elements[self.idx];
 
             // If no childrens
             if self.nested_element.is_none() && !rv.children.is_empty() {
                 self.nested_element = Some(Box::new(ElementsIter {
                     idx: 0,
-                    element: rv,
+                    elements: rv.children.iter().collect(),
                     nested_element: None,
                 }));
+                return Some(rv);
             }
 
-            self.nested_element.as_mut()
-                // if here some childrens it call iterator on them
-                .and_then(|e| e.next())
-                .or_else(|| {
-                    // There is no any childrens on childrens -
-                    // continue iterating over root element childrens
-                    self.idx += 1;
-                    Some(rv)
-                })
+
+            if let Some(ref mut e) = self.nested_element {
+                if let Some(e) = e.next() {
+                    return Some(e);
+                }
+                return None;
+            }
+
+            // self.nested_element.as_mut()
+            //     // if here some childrens it call iterator on them
+            //     .and_then(|e| e.next())
+            //     .or_else(|| {
+            //         // There is no any childrens on childrens -
+            //         // continue iterating over root element childrens
+            //         self.idx += 1;
+            //         Some(rv)
+            //     })
+            self.idx += 1;
+            Some(rv)
         } else {
             None
         }
@@ -712,12 +723,15 @@ impl Iterator for ElementsIterMut {
                         .collect(),
                     nested_element: None,
                 }));
+                let rv = self.elements[self.idx].clone();
+                return Some(rv);
             }
 
             if let Some(ref mut e) = self.nested_element {
                 if let Some(e) = e.next() {
                     return Some(e);
                 }
+                return None;
             }
 
             // let s = self.nested_element.as_mut()
@@ -1377,7 +1391,7 @@ impl Element {
     pub fn iter_elements(&self) -> ElementsIter {
         ElementsIter {
             idx: 0,
-            element: self,
+            elements: vec![self],
             nested_element: None,
         }
     }
@@ -1385,10 +1399,11 @@ impl Element {
     pub fn into_iter_elements_mut(self) -> ElementsIterMut {
         ElementsIterMut {
             idx: 0,
-            elements: self.children
-                .into_iter()
-                .map(|e| Rc::new(RefCell::new(e)))
-                .collect(),
+            // elements: self.children
+            //     .into_iter()
+            //     .map(|e| Rc::new(RefCell::new(e)))
+            //     .collect(),
+            elements: vec![Rc::new(RefCell::new(self))],
             nested_element: None,
         }
     }
